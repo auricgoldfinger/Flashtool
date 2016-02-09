@@ -1,5 +1,8 @@
 package org.system;
 
+import java.io.BufferedInputStream;
+import java.io.BufferedOutputStream;
+import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
@@ -11,6 +14,7 @@ import java.io.RandomAccessFile;
 import java.math.BigInteger;
 import java.net.URL;
 import java.net.URLClassLoader;
+import java.security.InvalidKeyException;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.text.DateFormat;
@@ -24,13 +28,13 @@ import java.util.jar.Manifest;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 
+import javax.crypto.NoSuchPaddingException;
+
 import org.apache.log4j.Logger;
+import org.apache.log4j.lf5.util.StreamUtils;
 import org.logger.LogProgress;
 import org.util.HexDump;
-
-import com.sonymobile.cs.generic.encoding.RC4DecryptingInputStream;
-import com.sonymobile.cs.generic.encoding.RC4EncryptingOutputStream;
-
+import com.google.common.io.BaseEncoding;
 import java.util.zip.CheckedInputStream;
 import java.util.zip.Adler32;
 
@@ -38,6 +42,14 @@ public class OS {
 
 	private static Logger logger = Logger.getLogger(OS.class);
 	
+	public static String RC4Key = "DoL6FBfnYcNJBjH31Vnz6lKATTaDGe4y";
+	public static String AESKey = "qAp!wmvl!cOS7xSQV!aoR7Qz*neY^5Sx";
+	public static String AESIV  = "5621616F5237517A21634F5337785351";
+
+	public static String getPlatform() {
+		return System.getProperty("sun.arch.data.model");
+	}
+
 	public static String getName() {
 		  String os = "";
 		  if (System.getProperty("os.name").toLowerCase().indexOf("windows") > -1) {
@@ -65,7 +77,7 @@ public class OS {
 			File f = new File(folder);
 			if (!f.exists()) f.mkdirs();
 			else if (f.isFile()) throw new IOException("destination must be a folder");
-			ProcessBuilderWrapper command = new ProcessBuilderWrapper(new String[] {getWorkDir()+File.separator+"x10flasher_lib"+File.separator+"unyaffs."+getName(),yaffsfile,folder},false);
+			ProcessBuilderWrapper command = new ProcessBuilderWrapper(new String[] {getWorkDir()+File.separator+"x10flasher_lib"+File.separator+"unyaffs."+getName()+"."+OS.getPlatform(),yaffsfile,folder},false);
 		}
 		catch (Exception e) {
 			logger.warn("Failed : "+e.getMessage());
@@ -76,9 +88,9 @@ public class OS {
 		if (OS.getName().equals("windows"))
 			return new File(System.getProperty("user.dir")+File.separator+"x10flasher_lib"+File.separator+"adb.exe").getAbsolutePath();
 		else
-			return new File(System.getProperty("user.dir")+File.separator+"x10flasher_lib"+File.separator+"adb."+OS.getName()).getAbsolutePath();
+			return new File(System.getProperty("user.dir")+File.separator+"x10flasher_lib"+File.separator+"adb."+OS.getName()+"."+OS.getPlatform()).getAbsolutePath();
 	}
-
+	
 	public static String getPathBin2Sin() {
 		if (OS.getName().equals("windows"))
 			return new File(System.getProperty("user.dir")+File.separator+"x10flasher_lib"+File.separator+"bin2sin.exe").getAbsolutePath();
@@ -94,12 +106,22 @@ public class OS {
 			return new File(System.getProperty("user.dir")+fsep+"x10flasher_lib"+fsep+"bin2elf").getAbsolutePath();
 	}
 
+	public static String getPathXperiFirmWrapper() {
+		String fsep = OS.getFileSeparator();
+		return new File(System.getProperty("user.dir")+fsep+"x10flasher_lib"+fsep+"xperifirm").getAbsolutePath();
+	}
+
 	public static String getPathFastBoot() {
 		String fsep = OS.getFileSeparator();
 	   if (OS.getName().equals("windows"))
 		   return new File(System.getProperty("user.dir")+fsep+"x10flasher_lib"+fsep+"fastboot.exe").getAbsolutePath();
 	   else
-		   return new File(System.getProperty("user.dir")+fsep+"x10flasher_lib"+fsep+"fastboot."+OS.getName()).getAbsolutePath();
+		   return new File(System.getProperty("user.dir")+fsep+"x10flasher_lib"+fsep+"fastboot."+OS.getName()+"."+OS.getPlatform()).getAbsolutePath();
+	}
+	
+	public static String getPathXperiFirm() {
+		String fsep = OS.getFileSeparator();
+		return new File(OS.getFolderUserFlashtool()+fsep+"XperiFirm.exe").getAbsolutePath();
 	}
 	
 	public static String getWorkDir() {
@@ -345,7 +367,7 @@ public class OS {
 	public static void ZipExplodeToHere(String zippath) throws FileNotFoundException, IOException  {
 		byte buffer[] = new byte[10240];
 		File zipfile = new File(zippath);
-		File outfolder = new File(zipfile.getParentFile().getAbsolutePath()+File.separator+zipfile.getName().replace(".zip", "").replace(".ZIP", ""));
+		File outfolder = new File(zipfile.getParentFile().getAbsolutePath());
 		outfolder.mkdirs();
 		ZipInputStream zis = new ZipInputStream(new FileInputStream(zippath));
 		ZipEntry ze = zis.getNextEntry();
@@ -361,7 +383,25 @@ public class OS {
 		zis.closeEntry();
 		zis.close();
 	}
-	
+
+	public static void ZipExplodeTo(InputStream stream, File outfolder) throws FileNotFoundException, IOException  {
+		byte buffer[] = new byte[10240];
+		outfolder.mkdirs();
+		ZipInputStream zis = new ZipInputStream(stream);
+		ZipEntry ze = zis.getNextEntry();
+		while (ze != null) {
+			FileOutputStream fout = new FileOutputStream(outfolder.getAbsolutePath()+File.separator+ze.getName());
+			int len;
+			while ((len=zis.read(buffer))>0) {
+				fout.write(buffer,0,len);
+			}
+			fout.close();
+			ze=zis.getNextEntry();
+		}
+		zis.closeEntry();
+		zis.close();
+	}
+
 	public static void viewAllThreads() {
 
 
@@ -439,11 +479,11 @@ public class OS {
     	}
     }
 
-    public static void decrypt(File infile) {
+    public static void decrypt(File infile) throws InvalidKeyException, NoSuchAlgorithmException, NoSuchPaddingException {
 		byte[] buf = new byte[1024];
 		try {
 			if (!infile.getName().endsWith(".enc")) throw new IOException("Bad filename");
-			RC4DecryptingInputStream in = new RC4DecryptingInputStream(new FileInputStream(infile));
+			RC4InputStream in = new RC4InputStream(new FileInputStream(infile));
 			File outfile = new File(infile.getAbsolutePath().substring(0, infile.getAbsolutePath().length()-4));
 	        OutputStream out = new FileOutputStream(outfile);
 	        int len;
@@ -458,12 +498,12 @@ public class OS {
 	      }
 	}
 
-	  public static void encrypt(File infile) {
+	  public static void encrypt(File infile) throws InvalidKeyException, NoSuchAlgorithmException, NoSuchPaddingException {
 		  byte[] buf = new byte[1024];
 	      try {
 	    	  String outname = infile.getAbsolutePath()+".enc";
 	    	  FileInputStream in = new FileInputStream(infile);
-	    	  RC4EncryptingOutputStream out = new RC4EncryptingOutputStream(new FileOutputStream(outname));
+	    	  RC4OutputStream out = new RC4OutputStream(new FileOutputStream(outname));
 	    	  int len;
 	    	  while((len = in.read(buf)) >= 0) {
 	    		  if (len > 0)
@@ -486,12 +526,15 @@ public class OS {
 	  }
 
 	  public static String getFolderDevices() {
-			return OS.getWorkDir()+File.separator+"devices";
+			return OS.getFolderUserFlashtool()+File.separator+"devices";
 	  }
 
 	  public static String getFolderUserFlashtool() {
-		  new File(getUserHome()+File.separator+".flashTool").mkdirs();
-		  return getUserHome()+File.separator+".flashTool";
+		  String folder = GlobalConfig.getProperty("user.flashtool");
+		  if (folder==null) folder = getUserHome()+File.separator+".flashTool";
+		  new File(folder).mkdirs();
+		  GlobalConfig.setProperty("user.flashtool", folder);
+		  return folder;
 	  }
 
 	  public static String getFolderFirmwares() {
@@ -509,19 +552,43 @@ public class OS {
 		  return OS.getFolderFirmwares()+File.separator+"Downloads";
 	  }
 
+	  public static String getFolderFirmwaresScript() {
+		  new File(OS.getFolderFirmwares()+File.separator+"Scripts").mkdirs();
+		  return OS.getFolderFirmwares()+File.separator+"Scripts";
+	  }
+
 	  public static String getFolderFirmwaresSinExtracted() {
 		  new File(OS.getFolderFirmwares()+File.separator+"sinExtracted").mkdirs();
 		  return OS.getFolderFirmwares()+File.separator+"sinExtracted";
 	  }
 
-	  public static String getFolderCustomDevices() {
-		  new File(OS.getFolderUserFlashtool()+File.separator+"devices").mkdirs();
-		  return OS.getFolderUserFlashtool()+File.separator+"devices";		  
+	  public static String getFolderMyDevices() {
+		  new File(OS.getFolderUserFlashtool()+File.separator+"mydevices").mkdirs();
+		  return OS.getFolderUserFlashtool()+File.separator+"mydevices";		  
 	  }
 
-	  public static String getFolderMyDevices() {
+	  public static String getFolderRegisteredDevices() {
 		  new File(OS.getFolderUserFlashtool()+File.separator+"registeredDevices").mkdirs();
 		  return OS.getFolderUserFlashtool()+File.separator+"registeredDevices";
+	  }
+
+	  public static void unpackArchive(URL url, File targetDir) throws IOException {
+	      if (!targetDir.exists()) {
+	          targetDir.mkdirs();
+	      }
+	      byte[] zipfile = StreamUtils.getBytes(url.openStream());
+	      OS.ZipExplodeTo(new ByteArrayInputStream(zipfile),new File(OS.getFolderUserFlashtool()));
+	  }
+	  
+	  public static void copyInputStream(InputStream in, OutputStream out) throws IOException {
+	      byte[] buffer = new byte[1024];
+	      int len = in.read(buffer);
+	      while (len >= 0) {
+	          out.write(buffer, 0, len);
+	          len = in.read(buffer);
+	      }
+	      in.close();
+	      out.close();
 	  }
 
 }

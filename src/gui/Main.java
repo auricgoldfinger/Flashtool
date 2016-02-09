@@ -1,5 +1,6 @@
 package gui;
 
+
 import joptsimple.OptionParser;
 import joptsimple.OptionSet;
 import libusb.LibUsbException;
@@ -15,8 +16,8 @@ public class Main {
 		OS.getFolderFirmwaresDownloaded();
 		OS.getFolderFirmwaresPrepared();
 		OS.getFolderFirmwaresSinExtracted();
-		OS.getFolderCustomDevices();
 		OS.getFolderMyDevices();
+		OS.getFolderRegisteredDevices();
 		AWTKillerThread k = new AWTKillerThread();
 		k.start();
 		try {

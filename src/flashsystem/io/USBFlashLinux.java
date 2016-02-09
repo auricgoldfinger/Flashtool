@@ -3,9 +3,14 @@ package flashsystem.io;
 import flashsystem.S1Packet;
 import flashsystem.X10FlashException;
 
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
 
 import org.apache.log4j.Logger;
+
+import win32lib.JKernel32;
+
+import com.igormaznitsa.jbbp.io.JBBPBitInputStream;
 
 import linuxlib.JUsb;
 
@@ -14,7 +19,7 @@ public class USBFlashLinux {
 	private static int lastflags;
 	private static byte[] lastreply;
 	private static Logger logger = Logger.getLogger(USBFlashLinux.class);
-	
+
 	public static void linuxOpen(String pid) throws IOException, Exception  {
 			logger.info("Opening device for R/W");
 			JUsb.fillDevice(false);
@@ -22,17 +27,15 @@ public class USBFlashLinux {
 			logger.info("Device ready for R/W.");
 	}
 
-	public static void linuxWriteS1(S1Packet p) throws IOException,X10FlashException {
+	public static boolean linuxWriteS1(S1Packet p) throws IOException,X10FlashException {
 		try {
-			logger.debug("Writing packet to phone");
-			JUsb.writeBytes(p.getHeader());
-			if (p.getDataLength()>0)
-				JUsb.writeBytes(p.getDataArray());
+			JUsb.writeBytes(p.getHeaderWithChecksum());
+			JUsb.writeBytes(p.getDataArray());
 			JUsb.writeBytes(p.getCRC32());
 			logger.debug("OUT : " + p);
-		} catch (Exception e1) {
-			// TODO Auto-generated catch block
-			e1.printStackTrace();
+			return true;
+		} catch (Exception e) {
+			throw new IOException(e.getMessage());
 		}
 	}
 
@@ -48,14 +51,10 @@ public class USBFlashLinux {
     public static  void linuxReadS1Reply() throws X10FlashException, IOException
     {
     	logger.debug("Reading packet from phone");
-    	byte[] read = JUsb.readBytes(13);
-    	S1Packet p=new S1Packet(read);
-    	if (p.getDataLength()>0) {
-    		read = JUsb.readBytes(p.getDataLength());
-    		p.addData(read);
+    	S1Packet p=new S1Packet(JUsb.readBytes());
+    	while (p.hasMoreToRead()) {
+    		p.addData(JUsb.readBytes());
     	}
-    	read = JUsb.readBytes(4);
-    	p.addData(read);
 		p.validate();
 		logger.debug("IN : " + p);
 		lastreply = p.getDataArray();

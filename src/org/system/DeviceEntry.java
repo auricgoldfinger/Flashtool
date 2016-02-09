@@ -15,7 +15,7 @@ public class DeviceEntry {
 	PropertiesFile _entry;
 	private Boolean hasBusybox=null;
 	private boolean isRecoveryMode=false;
-	private HashSet<DeviceEntryModel> models = new HashSet<DeviceEntryModel>();
+	//private HashSet<DeviceEntryModel> models = new HashSet<DeviceEntryModel>();
 	
 	public void queryAll() {
 		setVersion();
@@ -93,8 +93,13 @@ public class DeviceEntry {
 	public DeviceEntry(String Id) {
 		_entry = new PropertiesFile();
 		try {
-			String path = OS.getFolderDevices()+File.separator+Id+File.separator+Id+".properties";
-			_entry.open("",path);			
+			String path = OS.getFolderMyDevices()+File.separator+Id+File.separator+Id+".properties";
+			if (new File(path).exists())
+				_entry.open("",path);
+			else {
+				path = OS.getFolderDevices()+File.separator+Id+File.separator+Id+".properties";
+				_entry.open("",path);
+			}
 		}
 		catch (Exception e) {
 			e.printStackTrace();
@@ -114,16 +119,19 @@ public class DeviceEntry {
 		return OS.getFolderDevices()+File.separator+getId();
 	}
 
-	public String getCustomDeviceDir() {
+	public String getMyDeviceDir() {
 		return OS.getFolderMyDevices()+File.separator+getId();
 	}
 	
+	public String getFolderRegisteted() {
+		return OS.getFolderRegisteredDevices()+File.separator+this.getSerial();
+	}
 	public String getCleanDir() {
-		return OS.getFolderMyDevices()+File.separator+getSerial()+File.separator+"clean"+File.separator+getBuildId();
+		return OS.getFolderRegisteredDevices()+File.separator+getSerial()+File.separator+"clean"+File.separator+getBuildId();
 	}
 
 	public String getAppsDir() {
-		return OS.getFolderMyDevices()+File.separator+getSerial()+File.separator+"apps"+File.separator+getBuildId();
+		return OS.getFolderRegisteredDevices()+File.separator+getSerial()+File.separator+"apps"+File.separator+getBuildId();
 	}
 	
 	public String getBuildProp() {
@@ -301,7 +309,7 @@ public class DeviceEntry {
     	return AdbUtility.getDevices().nextElement();
     }
     
-    public boolean canHandleUpdates() {
+    /*public boolean canHandleUpdates() {
     	Iterator<DeviceEntryModel> i = getModels().iterator();
     	while (i.hasNext()) {
     		if (i.next().getTac().length()>0) return true;
@@ -315,9 +323,9 @@ public class DeviceEntry {
     		if (i.next().getCDA().getProperties().size()>0) return true;
     	}
     	return false;
-    }
+    }*/
     
-    public HashSet<DeviceEntryModel> getModels() {
+    /*public HashSet<DeviceEntryModel> getModels() {
     	if (models.size()==0) {
 			Iterator<String> ivariants = getVariantList().iterator();
 			while (ivariants.hasNext()) {
@@ -325,5 +333,43 @@ public class DeviceEntry {
 			}
     	}
     	return models;
+    }*/
+    
+    public boolean hasFlashScript(String model, String version) {
+    	
+    	boolean official = new File(getDeviceDir()   + File.separator+model+"_"+version+".fsc").exists();
+    	boolean custom   = new File(getMyDeviceDir() + File.separator+model+"_"+version+".fsc").exists();
+    	
+    	boolean genericofficial = new File(getDeviceDir()   + File.separator+model+".fsc").exists();
+    	boolean genericcustom   = new File(getMyDeviceDir() + File.separator+model+".fsc").exists();
+    	
+    	boolean defaultofficial = new File(getDeviceDir()   + File.separator+"default.fsc").exists();
+    	boolean defaultcustom   = new File(getMyDeviceDir() + File.separator+"default.fsc").exists();
+    	
+    	return (official || custom || genericofficial || genericcustom || defaultofficial || defaultcustom);
     }
+
+    public String getFlashScript(String model, String version) {
+
+    	boolean official = new File(getDeviceDir()   + File.separator+model+"_"+version+".fsc").exists();
+    	boolean custom   = new File(getMyDeviceDir() + File.separator+model+"_"+version+".fsc").exists();
+    	
+    	boolean genericofficial = new File(getDeviceDir()   + File.separator+model+".fsc").exists();
+    	boolean genericcustom   = new File(getMyDeviceDir() + File.separator+model+".fsc").exists();
+    	
+    	boolean defaultofficial = new File(getDeviceDir()   + File.separator+"default.fsc").exists();
+    	boolean defaultcustom   = new File(getMyDeviceDir() + File.separator+"default.fsc").exists();
+
+    	if (custom)   return getMyDeviceDir()+File.separator+model+"_"+version+".fsc";
+    	if (official) return getDeviceDir()+File.separator+model+"_"+version+".fsc";
+    	
+    	if (genericcustom)   return getMyDeviceDir()+File.separator+model+".fsc";
+    	if (genericofficial) return getDeviceDir()+File.separator+model+".fsc";
+    	
+    	if (defaultcustom)   return getMyDeviceDir()+File.separator+"default.fsc";
+    	if (defaultofficial) return getDeviceDir()+File.separator+"default.fsc";
+
+    	return "";
+    }
+
 }

@@ -1,12 +1,12 @@
 <?xml version="1.0" encoding="UTF-8" standalone="no"?>
 <project default="all" name="Deploy Flashtool">
+
+	<property name="version" value="0.9.19.10"/>
+	<property name="progtime" value="04-10-2015 21:00:00"/>
 	
-	<property name="version" value="0.9.18.5"/>
-	<property name="progtime" value="14-02-2015 15:30:00"/>
-	
+	 
 	<target name="all" depends="core release"/>
-
-
+	
 	<target name="clean">
     	<mkdir dir="../../Deploy"/>
     	<delete dir="../../Deploy/FlashTool"/>
@@ -15,7 +15,7 @@
 	<target name="clone">
 		<git-clone uri="https://github.com/Androxyde/devices.git" dest="../../Deploy/FlashTool/devices" />
 	</target>	
-	
+
 	<target name="ressources">
         <jar destfile="../../Deploy/FlashTool/x10flasher_lib/x10flasher-res.jar">
             <manifest>
@@ -36,8 +36,6 @@
         <mkdir dir ="../../Deploy/FlashTool/custom/shells"/>
     	<mkdir dir ="../../Deploy/FlashTool/custom/features"/>
 		<mkdir dir ="../../Deploy/FlashTool/custom/sin"/>
-		<mkdir dir ="../../Deploy/FlashTool/custom/mydevices"/>
-		<mkdir dir ="../../Deploy/FlashTool/firmwares"/>
         <mkdir dir="../../Deploy/FlashTool/x10flasher_lib"/>
         <mkdir dir="../../Deploy/FlashTool/x10flasher_lib/langs"/>
         <mkdir dir="../../Deploy/FlashTool/drivers"/>
@@ -49,10 +47,6 @@
     		<fileset dir="../src/org/lang/ressources"
 				excludes="**/.svn"/>
     	</copy>
-        <copy todir="../../Deploy/FlashTool/firmwares">
-            <fileset dir="../firmwares"
-                excludes="**/.svn"/>
-        </copy>
 	    <copy todir="../../Deploy/FlashTool/custom/root">
 	       <fileset dir="../romupdates" excludes="**/.svn"/>
 	    </copy>
@@ -81,13 +75,5 @@
 				excludes="**/.svn"/>
 		</copy>
     </target>
-	
-	<taskdef resource="org/eclipse/jgit/ant/ant-tasks.properties">
-	       <classpath>
-	         <pathelement location="../libs/jgit.jar"/>
-	         <pathelement location="../libs/jgit.ant.jar"/>
-	         <pathelement location="../libs/jsch-0.1.51.jar"/>
-	       </classpath>
-	</taskdef>
 
 </project>

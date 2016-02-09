@@ -1,27 +1,33 @@
 package flashsystem;
 
 import java.io.IOException;
+import java.util.Arrays;
+import java.util.stream.Stream;
 
 import org.logger.LogProgress;
 import org.logger.MyLogger;
 import org.util.HexDump;
+
+import com.google.common.collect.ObjectArrays;
+import com.google.common.primitives.Bytes;
 
 import flashsystem.io.USBFlash;
 
 public class Command {
 
     private boolean _simulate;
+    private byte[] reply;
 
     public static final byte[] TA_FLASH_STARTUP_SHUTDOWN_RESULT_ONGOING	 = {
     	0x00, 0x00, 0x27, 0x74, 0x00, 0x00, 0x00, 0x01, 0x01};
 	public static final byte[] TA_FLASH_STARTUP_SHUTDOWN_RESULT_FINISHED		 = {
 		0x00, 0x00, 0x27, 0x74, 0x00, 0x00, 0x00, 0x01, 0x00};
 
-	public static final byte[] TA_DEVID1 = {
+	public static final byte[] TA_MODEL = {
 		(byte)0x00, (byte)0x00, (byte)0x08, (byte)0xA2
 	};
 
-	public static final byte[] TA_DEVID2 = {
+	public static final byte[] TA_SERIAL = {
 		(byte)0x00, (byte)0x00, (byte)0x13, (byte)0x24
 	};
 	
@@ -36,9 +42,6 @@ public class Command {
 	public static final byte[] TA_DEVID5 = {
 		(byte)0x00, (byte)0x00, (byte)0x08, (byte)0x9E
 	};
-	public static final byte[] DISABLEFINALVERIF = {
-		0x00, 0x01, 0x00, 0x00, 0x00, 0x01
-	};
 
 	static final int CMD01 = 1;
 	static final int CMD04 = 4;
@@ -51,8 +54,8 @@ public class Command {
 	static final int CMD13 = 13;
 	static final int CMD18 = 18;
 	static final int CMD25 = 25;
-	
-	
+
+
 	static final byte[] VALNULL = new byte[0];
 	static final byte[] VAL1 = new byte[] {1};
 	static final byte[] VAL2 = new byte[] {2};
@@ -63,7 +66,7 @@ public class Command {
 	
     public String getLastReplyString() {
     	try {
-    		return new String(USBFlash.getLastReply());
+    		return new String(reply);
     	}
     	catch (Exception e) {
     		return "";
@@ -72,7 +75,7 @@ public class Command {
 
     public String getLastReplyHex() {
     	try {
-    		return HexDump.toHex(USBFlash.getLastReply());
+    		return HexDump.toHex(reply);
     	}
     	catch (Exception e) {
     		return "";
@@ -81,7 +84,7 @@ public class Command {
 
     public short getLastReplyLength() {
     	try {
-    		return (short)USBFlash.getLastReply().length;
+    		return (short)reply.length;
     	}
     	catch (Exception e) {
     		return 0;
@@ -89,7 +92,7 @@ public class Command {
     }
     
     public byte[] getLastReply() {
-    	return USBFlash.getLastReply();
+    	return reply;
     }
     
     public boolean isMultiPacketMessage() {
@@ -121,12 +124,19 @@ public class Command {
     public void send(int cmd, byte data[], boolean ongoing) throws X10FlashException, IOException
     {
     	writeCommand(cmd, data, ongoing);
-    	LogProgress.updateProgress();
+    	reply = USBFlash.getLastReply();
     	if (USBFlash.getLastFlags()==0) {
     		writeCommand(Command.CMD07, Command.VALNULL, false);
     		throw new X10FlashException(getLastReplyString());
     	}
-		
+    	while(isMultiPacketMessage()) {
+    		writeCommand(cmd, data, ongoing);
+	    	reply = Bytes.concat(reply,USBFlash.getLastReply());
+	    	if (USBFlash.getLastFlags()==0) {
+	    		writeCommand(Command.CMD07, Command.VALNULL, false);
+	    		throw new X10FlashException(getLastReplyString());
+	    	}
+    	}
+    	LogProgress.updateProgress();		
     }
-
 }

@@ -1,15 +1,17 @@
 package org.sinfile.parsers;
 
-import gui.MainSWT;
-
+import java.io.BufferedInputStream;
 import java.io.File;
 import java.io.FileInputStream;
+import java.io.FileNotFoundException;
 import java.io.IOException;
+import java.io.RandomAccessFile;
 
 import org.apache.log4j.Logger;
 import org.sinfile.parsers.v3.AddrBlock;
-import org.sinfile.parsers.v3.AddrBlocks;
-import org.sinfile.parsers.v3.DataHeader;
+import org.sinfile.parsers.v3.HashBlock;
+import org.system.OS;
+import org.util.BytesUtil;
 
 import com.igormaznitsa.jbbp.JBBPParser;
 import com.igormaznitsa.jbbp.io.JBBPBitInputStream;
@@ -20,10 +22,15 @@ public class SinFile {
 	int version=0;
 	JBBPBitInputStream sinStream = null;
 	FileInputStream fin = null;
+	BufferedInputStream bin = null;
+	private int packetsize=0;
+	private long nbchunks=0;
+	private long filesize;
+
+	public org.sinfile.parsers.v1.SinParser sinv1 = null;
+	public org.sinfile.parsers.v2.SinParser sinv2 = null;
+	public org.sinfile.parsers.v3.SinParser sinv3 = null;
 	
-	org.sinfile.parsers.v1.SinParser sinv1 = null;
-	org.sinfile.parsers.v2.SinParser sinv2 = null;
-	org.sinfile.parsers.v3.SinParser sinv3 = null;
 	private static Logger logger = Logger.getLogger(SinFile.class);
 	
 	public SinFile(File f) throws SinFileException {
@@ -59,8 +66,7 @@ public class SinFile {
         );
 
 		try {
-			fin=new FileInputStream(sinfile);
-			sinStream = new JBBPBitInputStream(fin);
+			openStreams();
 			version = sinStream.readByte();
 			if (version!=1 && version!=2 && version!=3) throw new SinFileException("Not a sin file");
 			if (version==1) {
@@ -73,13 +79,18 @@ public class SinFile {
 				sinv2 = sinParserV2.parse(sinStream).mapTo(org.sinfile.parsers.v2.SinParser.class);
 				if (sinv2.hashLen>sinv2.headerLen) throw new SinFileException("Error parsing sin file");
 				sinv2.parseHash(sinStream);
+				sinv2.setFile(sinfile);
 				closeStreams();
 			}
 			if (version==3) {
 				sinv3 = sinParserV3.parse(sinStream).mapTo(org.sinfile.parsers.v3.SinParser.class);
+				sinv3.setLength(sinfile.length());
+				sinv3.setFile(sinfile);
 				if (!new String(sinv3.magic).equals("SIN")) throw new SinFileException("Error parsing sin file");
 				if (sinv3.hashLen>sinv3.headerLen) throw new SinFileException("Error parsing sin file");
 				sinv3.parseHash(sinStream);
+				openStreams();
+				sinStream.skip(sinv3.headerLen);
 				sinv3.parseDataHeader(sinStream);
 				closeStreams();
 			}
@@ -89,15 +100,56 @@ public class SinFile {
 		}
 	}
 
+	public byte[] getHeader() throws IOException {
+		if (sinv1!=null) {
+			return null;
+		}
+		if (sinv2!=null) {
+			return sinv2.getHeader();
+		}
+		if (sinv3!=null) {
+			return sinv3.getHeader();
+		}
+		return null;		
+	}
+	
+	public byte getPartitionType() {
+		if (sinv1!=null) {
+			return sinv1.payloadType;
+		}
+		if (sinv2!=null) {
+			return sinv2.payloadType;
+		}
+		if (sinv3!=null) {
+			return (byte)sinv3.payloadType;
+		}
+		return 0;
+	}
+
+	public String getPartypeString() {
+		if (getPartitionType()==0x09)
+			return "Without spare";
+		if (getPartitionType()==0x0A)
+			return "With spare";
+		return "unknown";
+	}
+
 	public void closeStreams() {
 		try {
 			sinStream.close();
-		} catch (Exception e) {
-		}
+		} catch (Exception e) {}
 		try {
 			fin.close();
-		} catch (Exception e) {
-		}		
+		} catch (Exception e) {}
+		try {
+			bin.close();
+		} catch (Exception e) {}
+	}
+	
+	public void openStreams() throws FileNotFoundException {
+		closeStreams();
+		fin=new FileInputStream(sinfile);
+		sinStream = new JBBPBitInputStream(fin);
 	}
 	
 	public String getName() {
@@ -132,7 +184,6 @@ public class SinFile {
 		}
 		if (version==3) {
 			builder.append("Version : "+version+"\nMagic : "+new String(sinv3.magic)+"\nHeader Length : "+sinv3.headerLen+"\nPayLoad Type : "+sinv3.payloadType+"\nHash type : "+sinv3.hashType+"\nReserved : "+sinv3.reserved+"\nHashList Length : "+sinv3.hashLen+" ("+sinv3.blocks.blocks.length+" hashblocks) \nCert len : "+sinv3.certLen+"\n");
-			builder.append(sinv3.addrBlocks.addrBlocks[0].dataLen+"\n");
 		}
 		return builder.toString();
 	}
@@ -152,4 +203,180 @@ public class SinFile {
 		}
 		return "";
 	}
+	
+	public int getHeaderLength() {
+		if (sinv1!=null) {
+			return sinv1.headerLen;
+		}
+		if (sinv2!=null) {
+			return sinv2.headerLen;
+		}
+		if (sinv3!=null) {
+			return sinv3.headerLen;
+		}
+		return 0;
+	}
+
+	public boolean hasPartitionInfo() {
+		if (sinv1!=null) {
+			return false;
+		}
+		if (sinv2!=null) {
+			return sinv2.hasPartitionInfo();
+		}
+		if (sinv3!=null) {
+			return false;
+		}
+		return false;
+	}
+
+	public byte[] getPartitionInfo() throws IOException {
+		if (hasPartitionInfo()) {
+			if (sinv1!=null) {
+				return null;
+			}
+			if (sinv2!=null) {
+				return sinv2.getPartitionInfo();
+			}
+			if (sinv3!=null) {
+				return null;
+			}
+			return null;
+		}
+		else return null;
+	}
+	
+	public int getDataOffset() {
+		if (sinv1!=null) {
+			return sinv1.headerLen;
+		}
+		if (sinv2!=null) {
+			return sinv2.headerLen;
+		}
+		if (sinv3!=null) {
+			return sinv3.getDataOffset();
+		}
+		return 0;
+	}
+	
+	public String getDataType() throws IOException {
+		if (sinv1!=null) {
+			return "";
+		}
+		if (sinv2!=null) {
+			return "";
+		}
+		if (sinv3!=null) {
+			return sinv3.getDataType();
+		}
+		return "";		
+	}
+	
+	public long getDataSize() throws IOException{
+		if (sinv1!=null) {
+			return 0;
+		}
+		if (sinv2!=null) {
+			return 0;
+		}
+		if (sinv3!=null) {
+			return sinv3.getDataSize();
+		}
+		return 0;
+	}
+
+	public void dumpImage() throws IOException{
+		if (sinv1!=null) {
+			return;
+		}
+		if (sinv2!=null) {
+			return;
+		}
+		if (sinv3!=null) {
+			sinv3.dumpImage();
+		}
+		return;
+	}
+
+	public void dumpHeader() throws IOException {
+		if (sinv1!=null) {
+			return;
+		}
+		if (sinv2!=null) {
+			return;
+		}
+		if (sinv3!=null) {
+			sinv3.dumpHeader();
+		}
+		return;		
+	}
+	
+	public static String getShortName(String pname) {
+		String name = pname;
+		int extpos = name.lastIndexOf(".");
+		if (name.toUpperCase().endsWith(".TA")) {
+			if (extpos!=-1)
+				name = name.substring(0,extpos);
+			return name;
+		}
+		if (name.indexOf("_AID")!=-1)
+			name = name.substring(0, name.indexOf("_AID"));
+		if (name.indexOf("_PLATFORM")!=-1)
+			name = name.substring(0, name.indexOf("_PLATFORM"));
+		if (name.indexOf("_S1")!=-1)
+			name = name.substring(0, name.indexOf("_S1"));
+		if (name.startsWith("elabel"))
+			name = "elabel";
+		if (name.indexOf("-")!=-1)
+			name = name.substring(0, name.indexOf("-"));
+		extpos = name.lastIndexOf(".");
+		if (extpos!=-1) {
+			name = name.substring(0,extpos);
+		}
+		return name;
+	}
+
+	public void setChunkSize(int size) {
+		packetsize=size;
+		filesize=sinfile.length()-getHeaderLength();
+		try {
+			nbchunks = filesize/packetsize;
+			if (filesize%packetsize>0) nbchunks++;
+		} catch (Exception e) {}
+
+	}
+	
+	public int getChunkSize() {
+		return packetsize;
+	}
+	
+	public long getNbChunks() throws IOException {
+		return nbchunks;
+	}
+
+	public void openForSending() throws IOException {
+		bin = new BufferedInputStream(new FileInputStream(sinfile));
+		bin.skip(getHeaderLength());
+	}
+	
+	public boolean hasData() throws IOException {
+		if (bin.available()==0) {
+			closeStreams();
+			return false;
+		}
+		return true;
+	}
+	
+	public byte[] getNextChunk() throws IOException {
+		try {
+			byte[] b = new byte[packetsize];
+			int nbread = bin.read(b);
+			if (nbread!=b.length) return BytesUtil.getReply(b, nbread);
+			return b;
+		}
+		catch (IOException ioe) {
+			return null;
+		}
+	}
+
 }

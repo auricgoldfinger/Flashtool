@@ -2,12 +2,15 @@ package org.ta.parsers;
 
 
 import java.io.BufferedReader;
+import java.io.File;
+import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Iterator;
+import java.util.Vector;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -25,10 +28,20 @@ public class TAFileParser {
     private byte[] aUnitDataArray;
     private boolean aFoundPartition = false;
     private boolean aContinuationData = false;
+    private Vector<TAUnit> units = new Vector<TAUnit>();
+    private File tafile;
 
-    public TAFileParser() {
+    public TAFileParser(File taf)  throws TAFileParseException, IOException {
+    	tafile=taf;
+    	FileInputStream inputStream = new FileInputStream(taf);
+    	this.parse(inputStream);
+        inputStream.close();
     }
 
+    public String getName() {
+    	return tafile.getName();
+    }
+    
     public TAFileParser(InputStream inputStream) throws TAFileParseException, IOException {
         this.parse(inputStream);
         inputStream.close();
@@ -42,10 +55,15 @@ public class TAFileParser {
         this.aContinuationData = false;
         this.parsePartition();
         while (getNextUnit()>0) {
-        	this.getUnitData();
+        	getUnitData();
+        	TAUnit unit = new TAUnit((int)this.aUnit,this.aUnitDataArray);
+        	units.addElement(unit);
         }
     }
 
+    public Vector<TAUnit> entries() {
+    	return units;
+    }
 
     public int getPartition() {
         return this.aPartition;
@@ -65,6 +83,7 @@ public class TAFileParser {
         }
         String string = "";
         while ((string = this.aReader.readLine()) != null) {
+        	if (string.length()>62) throw new TAFileParseException("Data length per line exceeds 16 bytes for unit:[" + this.aUnit + "].");
             if (this.matchDataLine(string)) {
                 return this.aUnit;
             }
@@ -74,7 +93,6 @@ public class TAFileParser {
         return -1;
     }
 
-
     public byte[] getUnitData() throws TAFileParseException, IOException {
         while (this.aContinuationData) {
             String string = "";
@@ -82,6 +100,7 @@ public class TAFileParser {
             if (string == null) {
                 throw new TAFileParseException("Expected more data for unit:[" + this.aUnit + "].");
             }
+            if (string.length()>62) throw new TAFileParseException("Data length per line exceeds 16 bytes for unit:[" + this.aUnit + "].");
             if (this.matchContinuationDataLine(string)) continue;
             throw new TAFileParseException("Expected more data for unit:[" + this.aUnit + "] at line:[" + string + "].");
         }

@@ -1,11 +1,17 @@
 package gui;
 
 import flashsystem.Bundle;
+import flashsystem.Category;
+
 import java.io.File;
 import java.util.Enumeration;
+import java.util.Iterator;
+
 import org.eclipse.jface.viewers.IStructuredSelection;
 import org.eclipse.jface.viewers.TableViewer;
 import org.eclipse.swt.SWT;
+import org.eclipse.swt.events.MouseAdapter;
+import org.eclipse.swt.events.MouseEvent;
 import org.eclipse.swt.events.SelectionAdapter;
 import org.eclipse.swt.events.SelectionEvent;
 import org.eclipse.swt.widgets.Button;
@@ -21,22 +27,26 @@ import org.eclipse.swt.widgets.Shell;
 import org.eclipse.swt.widgets.Table;
 import org.eclipse.swt.widgets.TableColumn;
 import org.eclipse.swt.widgets.Text;
+import org.system.DeviceEntry;
 import org.system.OS;
 import org.eclipse.swt.layout.FillLayout;
 import org.eclipse.swt.layout.FormLayout;
 import org.eclipse.swt.layout.FormData;
 import org.eclipse.swt.layout.FormAttachment;
+
 import gui.models.ContentContentProvider;
 import gui.models.ContentLabelProvider;
 import gui.models.Firmware;
 import gui.models.FirmwareContentProvider;
 import gui.models.FirmwareLabelProvider;
 import gui.models.FirmwaresModel;
+import gui.tools.WidgetTask;
 import gui.tools.WidgetsTool;
 
 import org.eclipse.swt.layout.GridLayout;
 import org.eclipse.swt.layout.GridData;
 import org.eclipse.swt.custom.ScrolledComposite;
+import org.eclipse.swt.widgets.Combo;
 
 public class FTFSelector extends Dialog {
 
@@ -50,8 +60,6 @@ public class FTFSelector extends Dialog {
 	private Table tableFirmware;
 	private Table tableContent;
 	private Text sourceFolder;
-	private Button btnCheckCmd25;
-	private Button btnResetCust;
 	private Composite compositeContent;
 	private Composite compositeMisc;
 	private Button btnCancel;
@@ -61,6 +69,20 @@ public class FTFSelector extends Dialog {
 	private Composite compositeExclude;
 	private Composite compositeWipe;
 	private ScrolledComposite scrolledCompositeExclude;
+	private boolean simulate = false;
+	private Button btnCheckCmd25;
+	private Button btnFlash;
+	private Label lblContent;
+	private Combo comboUSBBuffer;
+	private int maxbuffer = 0;
+	private FormData fd_compositeContent;
+	private Text textDevice;
+	private Label lblNewLabel_1;
+	private FormData fd_compositeFirmware;
+	private FirmwaresModel firms=null;
+	private Label lblFirmware;
+	private Composite composite;
+	private int currentselected;
 
 	/**
 	 * Create the dialog.
@@ -78,7 +100,9 @@ public class FTFSelector extends Dialog {
 	 */
 	public Object open(String pathname, String ftfname) {
 		createContents(pathname, ftfname);
-		WidgetsTool.setSize(shlFirmwareSelector);		
+		WidgetsTool.setSize(shlFirmwareSelector);
+		if (result!=null)
+			btnCheckCmd25.setSelection(result.hasCmd25());
 		shlFirmwareSelector.open();
 		shlFirmwareSelector.layout();
 		Display display = getParent().getDisplay();
@@ -86,6 +110,10 @@ public class FTFSelector extends Dialog {
 			if (!display.readAndDispatch()) {
 				display.sleep();
 			}
+		}
+		if (result!=null) {
+			result.setSimulate(simulate);
+			result.setMaxBuffer(maxbuffer);
 		}
 		return result;
 	}
@@ -104,25 +132,9 @@ public class FTFSelector extends Dialog {
 		      }
 		    });
 		shlFirmwareSelector.setLayout(new FormLayout());
-		btnCancel = new Button(shlFirmwareSelector, SWT.NONE);
-		FormData fd_btnCancel = new FormData();
-		fd_btnCancel.right = new FormAttachment(100, -11);
-		fd_btnCancel.bottom = new FormAttachment(100, -10);
-		btnCancel.setLayoutData(fd_btnCancel);
-		btnCancel.addSelectionListener(new SelectionAdapter() {
-			@Override
-			public void widgetSelected(SelectionEvent e) {
-				result = null;
-				shlFirmwareSelector.dispose();
-			}
-		});
-		btnCancel.setText("Cancel");
 		
 		compositeFirmware = new Composite(shlFirmwareSelector, SWT.NONE);
-		FormData fd_compositeFirmware = new FormData();
-		fd_compositeFirmware.bottom = new FormAttachment(0, 408);
-		fd_compositeFirmware.right = new FormAttachment(0, 341);
-		fd_compositeFirmware.top = new FormAttachment(0, 73);
+		fd_compositeFirmware = new FormData();
 		fd_compositeFirmware.left = new FormAttachment(0, 10);
 		compositeFirmware.setLayoutData(fd_compositeFirmware);
 		compositeFirmware.setLayout(new FillLayout(SWT.HORIZONTAL));
@@ -163,6 +175,8 @@ public class FTFSelector extends Dialog {
 		    });
 		tableFirmware.addSelectionListener(new SelectionAdapter() {
 		      public void widgetSelected(SelectionEvent event) {
+		    	  if (currentselected!=tableFirmware.getSelectionIndex()) {
+		    	  currentselected = tableFirmware.getSelectionIndex();
 		    	  IStructuredSelection sel = (IStructuredSelection) tableFirmwareViewer.getSelection();
 		    	  Firmware firm = (Firmware)sel.getFirstElement();
 		    	  tableContentViewer.setInput(firm);
@@ -170,14 +184,16 @@ public class FTFSelector extends Dialog {
 		    	  result = firm.getBundle();
 		    	  btnCheckCmd25.setSelection(result.hasCmd25());
 		    	  updateCheckBoxes();
+		    	  }
 		      }
 		    });
 		
 		compositeContent = new Composite(shlFirmwareSelector, SWT.NONE);
-		FormData fd_compositeContent = new FormData();
-		fd_compositeContent.bottom = new FormAttachment(compositeFirmware, 0, SWT.BOTTOM);
-		fd_compositeContent.right = new FormAttachment(compositeFirmware, 164, SWT.RIGHT);
-		fd_compositeContent.left = new FormAttachment(compositeFirmware, 6);
+		fd_compositeFirmware.bottom = new FormAttachment(compositeContent, 0, SWT.BOTTOM);
+		fd_compositeFirmware.right = new FormAttachment(compositeContent, -6);
+		fd_compositeContent = new FormData();
+		fd_compositeContent.bottom = new FormAttachment(100, -47);
+		fd_compositeContent.left = new FormAttachment(0, 347);
 		compositeContent.setLayoutData(fd_compositeContent);
 
 		tableContentViewer = new TableViewer(compositeContent, SWT.NONE | SWT.V_SCROLL | SWT.H_SCROLL | SWT.BORDER);
@@ -197,7 +213,7 @@ public class FTFSelector extends Dialog {
 		tableContent.setHeaderVisible(true);
 		tableContent.setLinesVisible(true);
 		
-		Label lblFirmware = new Label(shlFirmwareSelector, SWT.NONE);
+		lblFirmware = new Label(shlFirmwareSelector, SWT.NONE);
 		FormData fd_lblFirmware = new FormData();
 		fd_lblFirmware.right = new FormAttachment(0, 109);
 		fd_lblFirmware.top = new FormAttachment(0, 53);
@@ -205,7 +221,7 @@ public class FTFSelector extends Dialog {
 		lblFirmware.setLayoutData(fd_lblFirmware);
 		lblFirmware.setText("Firmware :");
 		
-		Label lblContent = new Label(shlFirmwareSelector, SWT.NONE);
+		lblContent = new Label(shlFirmwareSelector, SWT.NONE);
 		fd_compositeContent.top = new FormAttachment(lblContent, 5);
 		FormData fd_lblContent = new FormData();
 		fd_lblContent.left = new FormAttachment(lblFirmware, 238);
@@ -223,11 +239,12 @@ public class FTFSelector extends Dialog {
 		lblWipe.setText("Wipe :");
 
 		lblMisc = new Label(shlFirmwareSelector, SWT.NONE);
+		fd_compositeContent.right = new FormAttachment(lblMisc, -6);
 		FormData fd_lblMisc = new FormData();
 		fd_lblMisc.right = new FormAttachment(100, -11);
-		fd_lblMisc.left = new FormAttachment(compositeContent, 6);
+		fd_lblMisc.left = new FormAttachment(0, 511);
 		lblMisc.setLayoutData(fd_lblMisc);
-		lblMisc.setText("Misc : ");
+		lblMisc.setText("MiscTA Exclude : ");
 
 		ScrolledComposite scrolledCompositeMisc = new ScrolledComposite(shlFirmwareSelector, SWT.BORDER | SWT.H_SCROLL | SWT.V_SCROLL);
 		fd_lblMisc.bottom = new FormAttachment(scrolledCompositeMisc, -2);
@@ -250,7 +267,7 @@ public class FTFSelector extends Dialog {
 		fd_lblWipe.top = new FormAttachment(compositeSearchBar, 6);
 		compositeSearchBar.setLayout(new GridLayout(3, false));
 		FormData fd_compositeSearchBar = new FormData();
-		fd_compositeSearchBar.right = new FormAttachment(btnCancel, 0, SWT.RIGHT);
+		fd_compositeSearchBar.right = new FormAttachment(100, -11);
 		fd_compositeSearchBar.left = new FormAttachment(0, 10);
 		fd_compositeSearchBar.bottom = new FormAttachment(lblFirmware, -6);
 		fd_compositeSearchBar.top = new FormAttachment(0, 10);
@@ -299,7 +316,7 @@ public class FTFSelector extends Dialog {
 				          // Set the text box to the new selection
 				        	if (!sourceFolder.getText().equals(dir)) {
 				        		sourceFolder.setText(dir);
-				        		updateTables();
+				        		updateTables(true);
 				        	}
 				        }
 					}
@@ -307,7 +324,7 @@ public class FTFSelector extends Dialog {
 				btnNewButton.setText("...");
 				ScrolledComposite scrolledCompositeWipe = new ScrolledComposite(shlFirmwareSelector, SWT.BORDER | SWT.H_SCROLL | SWT.V_SCROLL);
 				FormData fd_scrolledCompositeWipe = new FormData();
-				fd_scrolledCompositeWipe.right = new FormAttachment(btnCancel, 1, SWT.RIGHT);
+				fd_scrolledCompositeWipe.right = new FormAttachment(100, -10);
 				fd_scrolledCompositeWipe.left = new FormAttachment(compositeContent, 6);
 				fd_scrolledCompositeWipe.bottom = new FormAttachment(lblWipe, 103, SWT.BOTTOM);
 				fd_scrolledCompositeWipe.top = new FormAttachment(lblWipe, 5);
@@ -341,33 +358,146 @@ public class FTFSelector extends Dialog {
 				fd_lblExclude.left = new FormAttachment(compositeContent, 6);
 				lblExclude.setLayoutData(fd_lblExclude);
 				lblExclude.setText("Exclude :");
-				updateTables();
+				textDevice = new Text(shlFirmwareSelector, SWT.BORDER);
+				fd_compositeFirmware.top = new FormAttachment(0, 100);
+				textDevice.setToolTipText("Double click to get list of devices");
+				textDevice.addMouseListener(new MouseAdapter() {
+					@Override
+					public void mouseDoubleClick(MouseEvent e) {
+						String res = WidgetTask.openDeviceSelector(shlFirmwareSelector);
+						if (res.length()>0) {
+							DeviceEntry ent = new DeviceEntry(res);
+							textDevice.setText(ent.getName());
+							firms.firmwares.setDevice(ent.getId());
+							updateTables(false);
+						}
+					}
+				});
+				textDevice.setEditable(false);
+				FormData fd_textDevice = new FormData();
+				fd_textDevice.bottom = new FormAttachment(compositeFirmware, -6);
+				fd_textDevice.top = new FormAttachment(lblFirmware, 1);
+				textDevice.setLayoutData(fd_textDevice);
+				
+				lblNewLabel_1 = new Label(shlFirmwareSelector, SWT.NONE);
+				fd_textDevice.left = new FormAttachment(lblNewLabel_1, 6);
+				FormData fd_lblNewLabel_1 = new FormData();
+				fd_lblNewLabel_1.bottom = new FormAttachment(compositeFirmware, -6);
+				fd_lblNewLabel_1.left = new FormAttachment(0, 10);
+				lblNewLabel_1.setLayoutData(fd_lblNewLabel_1);
+				lblNewLabel_1.setText("Device filter :");
+				
+				Button btnNewButton_1 = new Button(shlFirmwareSelector, SWT.NONE);
+				btnNewButton_1.addSelectionListener(new SelectionAdapter() {
+					@Override
+					public void widgetSelected(SelectionEvent e) {
+						if (textDevice.getText().length()>0) {
+							textDevice.setText("");
+							firms.firmwares.setDevice("");
+							updateTables(false);
+						}
+					}
+				});
+				fd_textDevice.right = new FormAttachment(btnNewButton_1, -6);
+				FormData fd_btnNewButton_1 = new FormData();
+				fd_btnNewButton_1.bottom = new FormAttachment(compositeFirmware, -6);
+				fd_btnNewButton_1.right = new FormAttachment(compositeContent, -6);
+				btnNewButton_1.setLayoutData(fd_btnNewButton_1);
+				btnNewButton_1.setText("Clear filter");
+				
+				
+				composite = new Composite(shlFirmwareSelector, SWT.NONE);
+				composite.setLayout(new GridLayout(6, false));
+				FormData fd_composite = new FormData();
+				fd_composite.top = new FormAttachment(compositeFirmware, 12);
+				fd_composite.bottom = new FormAttachment(100, -4);
+				fd_composite.right = new FormAttachment(lblWipe, -144, SWT.RIGHT);
+				fd_composite.left = new FormAttachment(compositeFirmware, 0, SWT.LEFT);
+				composite.setLayoutData(fd_composite);
+				
+				
+				Button btnCheckSimulate = new Button(composite, SWT.CHECK);
+				btnCheckSimulate.addSelectionListener(new SelectionAdapter() {
+					@Override
+					public void widgetSelected(SelectionEvent e) {
+						simulate = btnCheckSimulate.getSelection();
+					}
+				});
+				btnCheckSimulate.setText("Simulate");
+				
+				btnCheckCmd25 = new Button(composite, SWT.CHECK);
+				btnCheckCmd25.setText("Disable final verification");
+				new Label(composite, SWT.NONE);
+				new Label(composite, SWT.NONE);
+				
+				Label lblNewLabel = new Label(composite, SWT.NONE);
+				lblNewLabel.setText("Max USB Buffer :");
+				
+				comboUSBBuffer = new Combo(composite, SWT.READ_ONLY);
+				comboUSBBuffer.addSelectionListener(new SelectionAdapter() {
+					@Override
+					public void widgetSelected(SelectionEvent e) {
+						maxbuffer=comboUSBBuffer.getSelectionIndex();
+					}
+				});
+				comboUSBBuffer.setItems(new String[] {"Device maxsize", "512K", "256K", "128K"});
+				comboUSBBuffer.select(0);
+				btnCancel = new Button(shlFirmwareSelector, SWT.NONE);
+				FormData fd_btnCancel = new FormData();
+				fd_btnCancel.bottom = new FormAttachment(composite, 0, SWT.BOTTOM);
+				fd_btnCancel.right = new FormAttachment(lblWipe, 0, SWT.RIGHT);
+				btnCancel.setLayoutData(fd_btnCancel);
+				btnCancel.addSelectionListener(new SelectionAdapter() {
+					@Override
+					public void widgetSelected(SelectionEvent e) {
+						result = null;
+						shlFirmwareSelector.dispose();
+					}
+				});
+				btnCancel.setText("Cancel");
+				btnFlash = new Button(shlFirmwareSelector, SWT.NONE);
+				FormData fd_btnFlash = new FormData();
+				fd_btnFlash.right = new FormAttachment(btnCancel, -6);
+				fd_btnFlash.bottom = new FormAttachment(composite, 0, SWT.BOTTOM);
+				btnFlash.setLayoutData(fd_btnFlash);
+				btnFlash.addSelectionListener(new SelectionAdapter() {
+					@Override
+					public void widgetSelected(SelectionEvent e) {
+						shlFirmwareSelector.dispose();
+					}
+				});
+				btnFlash.setText("Flash");
+				btnCheckCmd25.addSelectionListener(new SelectionAdapter() {
+					@Override
+					public void widgetSelected(SelectionEvent e) {
+						if (btnCheckCmd25.getSelection()) {
+							WidgetTask.openOKBox(shlFirmwareSelector, "Warning, this option will not be used if a FSC script is found");
+						}
+						result.setCmd25(btnCheckCmd25.getSelection()?"true":"false");
+					}
+				});
+				
+				updateTables(true);
 	}
 
-	public void updateTables() {
-		FirmwaresModel firms = new FirmwaresModel(sourceFolder.getText());
+	public void updateTables(boolean folderchange) {
+		if (folderchange) {
+			firms = new FirmwaresModel(sourceFolder.getText());
+			textDevice.setText("");
+		}
 		tableFirmwareViewer.setInput(firms.firmwares);
 		tableFirmwareViewer.refresh();
 		tableContentViewer.setInput(firms.getFirstFirmware());
 		tableContentViewer.refresh();
-		tableFirmware.select(0);
+		if (tableFirmware.getItemCount()>0) {
+			tableFirmware.select(0);
+		}
+		currentselected=0;
 	    if (tableFirmware.getSelection().length>0) {
 	    	IStructuredSelection sel = (IStructuredSelection) tableFirmwareViewer.getSelection();
 	    	Firmware firm = (Firmware)sel.getFirstElement();
 	    	result = firm.getBundle();
 	    }
-		Button btnNewButton_1 = new Button(shlFirmwareSelector, SWT.NONE);
-		btnNewButton_1.addSelectionListener(new SelectionAdapter() {
-			@Override
-			public void widgetSelected(SelectionEvent e) {
-				shlFirmwareSelector.dispose();
-			}
-		});
-		FormData fd_btnNewButton_1 = new FormData();
-		fd_btnNewButton_1.bottom = new FormAttachment(btnCancel, 0, SWT.BOTTOM);
-		fd_btnNewButton_1.right = new FormAttachment(btnCancel, -6);
-		btnNewButton_1.setLayoutData(fd_btnNewButton_1);
-		btnNewButton_1.setText("Flash");
 	    updateCheckBoxes();
 	}
 	
@@ -394,13 +524,13 @@ public class FTFSelector extends Dialog {
 			IStructuredSelection sel = (IStructuredSelection) tableFirmwareViewer.getSelection();
 	    	Firmware firm = (Firmware)sel.getFirstElement();
 			
-			Enumeration<String> exclude = result.getMeta().getExclude();
-	    	while (exclude.hasMoreElements()) {
-				String categ = exclude.nextElement();
+			Iterator<Category> exclude = result.getMeta().getExclude().iterator();
+	    	while (exclude.hasNext()) {
+				Category categ = exclude.next();
+				if (!(categ.isSin() || categ.isBootDelivery())) continue; 
 				Button btnExclude = new Button(compositeExclude, SWT.CHECK);
-				btnExclude.setText(categ);
-				btnExclude.setToolTipText(result.getMeta().getExcludeLabel(categ));
-				btnExclude.setSelection(!firm.getBundle().getMeta().isCategEnabled(categ));
+				btnExclude.setText(categ.getId());
+				btnExclude.setSelection(!categ.isEnabled());
 				compositeExclude.setSize(compositeExclude.computeSize(SWT.DEFAULT, SWT.DEFAULT));
 				compositeExclude.layout();
 				btnExclude.addSelectionListener(new SelectionAdapter() {
@@ -416,13 +546,13 @@ public class FTFSelector extends Dialog {
 					}
 				});
 	    	}
-	    	Enumeration<String> wipe = result.getMeta().getWipe();
-	    	while (wipe.hasMoreElements()) {
-				String categ = wipe.nextElement();
+
+	    	Iterator<Category> wipe = result.getMeta().getWipe().iterator();
+	    	while (wipe.hasNext()) {
+				Category categ = wipe.next();
 				Button btnWipe = new Button(compositeWipe, SWT.CHECK);
-				btnWipe.setText(categ);
-				btnWipe.setToolTipText(result.getMeta().getWipeLabel(categ));
-				btnWipe.setSelection(firm.getBundle().getMeta().isCategEnabled(categ));
+				btnWipe.setText(categ.getId());
+				btnWipe.setSelection(categ.isEnabled());
 				compositeWipe.setSize(compositeWipe.computeSize(SWT.DEFAULT, SWT.DEFAULT));
 				compositeWipe.layout();
 				btnWipe.addSelectionListener(new SelectionAdapter() {
@@ -438,27 +568,31 @@ public class FTFSelector extends Dialog {
 					}
 				});
 	    	}
-			btnCheckCmd25 = new Button(compositeMisc, SWT.CHECK);
-			btnCheckCmd25.addSelectionListener(new SelectionAdapter() {
-				@Override
-				public void widgetSelected(SelectionEvent e) {
-					result.setCmd25(btnCheckCmd25.getSelection()?"true":"false");
-				}
-			});
-			btnCheckCmd25.setText("No final verification");
-			btnCheckCmd25.setSelection(firm.getBundle().hasCmd25());
-			
-			btnResetCust = new Button(compositeMisc, SWT.CHECK);
-			btnResetCust.addSelectionListener(new SelectionAdapter() {
-				@Override
-				public void widgetSelected(SelectionEvent e) {
-					result.setResetStats(btnResetCust.getSelection()?"true":"false");
-				}
-			});
-			btnResetCust.setText("Reset customizations");
-			btnResetCust.setSelection(firm.getBundle().hasResetStats());
-			compositeMisc.setSize(compositeMisc.computeSize(SWT.DEFAULT, SWT.DEFAULT));
-			compositeMisc.layout();
+	    	
+			Iterator<Category> miscta = result.getMeta().getExclude().iterator();
+	    	while (miscta.hasNext()) {
+				Category categ = miscta.next();
+				if (!categ.isTa()) continue; 
+				Button btnMisc = new Button(compositeMisc, SWT.CHECK);
+				btnMisc.setText(categ.getId());
+				btnMisc.setSelection(!categ.isEnabled());
+				compositeMisc.setSize(compositeMisc.computeSize(SWT.DEFAULT, SWT.DEFAULT));
+				compositeMisc.layout();
+				btnMisc.addSelectionListener(new SelectionAdapter() {
+					@Override
+					public void widgetSelected(SelectionEvent e) {
+				    	IStructuredSelection sel = (IStructuredSelection) tableFirmwareViewer.getSelection();
+				    	Firmware firm = (Firmware)sel.getFirstElement();
+						Button b = (Button)e.widget;
+						if (b.getText().startsWith("SIMLOCK") && !b.getSelection())
+							WidgetTask.openOKBox(shlFirmwareSelector, "Warning, Including SIMLOCK can lead to a device brick. Do this only if you know what you do.");
+				    	if (b.getSelection()) firm.disableCateg(b.getText());
+				    	else firm.enableCateg(b.getText());
+						tableContentViewer.setInput(firm);
+						tableContentViewer.refresh();
+					}
+				});
+	    	}
 		}
 	}
 }

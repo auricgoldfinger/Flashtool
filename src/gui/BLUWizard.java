@@ -1,6 +1,5 @@
 package gui;
 
-import flashsystem.TaEntry;
 import flashsystem.X10flash;
 import gui.tools.BLUnlockJob;
 import gui.tools.WidgetTask;
@@ -24,6 +23,7 @@ import org.eclipse.swt.events.SelectionEvent;
 import org.eclipse.swt.widgets.Label;
 import org.eclipse.swt.widgets.Text;
 import org.system.ULCodeFile;
+import org.ta.parsers.TAUnit;
 
 public class BLUWizard extends Dialog {
 
@@ -89,7 +89,7 @@ public class BLUWizard extends Dialog {
 		    	  event.doit = true;
 		      }
 		    });
-		shlBootloaderUnlockWizard.setSize(286, 183);
+		shlBootloaderUnlockWizard.setSize(350, 220);
 		if (_action.equals("R"))
 			shlBootloaderUnlockWizard.setText("BootLoader Relock Wizard");
 		else
@@ -159,10 +159,7 @@ public class BLUWizard extends Dialog {
 				}
 				else {
 					if (_action.equals("R")) {
-						TaEntry ta = new TaEntry();
-						ta.setPartition(2226);
-						//byte[] data = new byte[2];data[0]=0;data[1]=0;
-						//ta.setData(data);
+						TAUnit ta = new TAUnit(2226, null);
 						logger.info("Relocking device");
 						WriteTAJob tj = new WriteTAJob("Write TA");
 						tj.addJobChangeListener(new IJobChangeListener() {
@@ -182,9 +179,7 @@ public class BLUWizard extends Dialog {
 						tj.schedule();
 					}
 					else {
-						TaEntry ta = new TaEntry();
-						ta.setPartition(2226);
-						ta.setData(textULCODE.getText().getBytes());
+						TAUnit ta = new TAUnit(2226, textULCODE.getText().getBytes());
 						logger.info("Unlocking device");
 						WriteTAJob tj = new WriteTAJob("Write TA");
 						tj.addJobChangeListener(new IJobChangeListener() {
